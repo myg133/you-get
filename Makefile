@@ -1,6 +1,6 @@
 SETUP = python3 setup.py
 
-.PHONY: default i test clean all html rst build sdist bdist bdist_egg bdist_wheel install rst release
+.PHONY: default i test clean all html rst build sdist bdist bdist_egg bdist_wheel install release
 
 default: i
 
@@ -12,12 +12,11 @@ test:
 
 clean:
 	zenity --question
-	rm -f README.rst
 	rm -fr build/ dist/ src/*.egg-info/
 	find . | grep __pycache__ | xargs rm -fr
 	find . | grep .pyc | xargs rm -f
 
-all: rst build sdist bdist bdist_egg bdist_wheel
+all: build sdist bdist bdist_egg bdist_wheel
 
 html:
 	pandoc README.md > README.html
@@ -41,8 +40,8 @@ bdist_wheel:
 	$(SETUP) bdist_wheel
 
 install:
-	$(SETUP) install
+	$(SETUP) install --user --prefix=
 
-release: rst
+release:
 	zenity --question
 	$(SETUP) sdist bdist_wheel upload --sign

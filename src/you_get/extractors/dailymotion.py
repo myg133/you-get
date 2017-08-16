@@ -3,29 +3,36 @@
 __all__ = ['dailymotion_download']
 
 from ..common import *
+import urllib.parse
 
-def dailymotion_download(url, output_dir = '.', merge = True, info_only = False):
+def rebuilt_url(url):
+    path = urllib.parse.urlparse(url).path
+    aid = path.split('/')[-1].split('_')[0]
+    return 'http://www.dailymotion.com/embed/video/{}?autoplay=1'.format(aid)
+
+def dailymotion_download(url, info_only=False, **kwargs):
     """Downloads Dailymotion videos by URL.
     """
 
-    id = match1(url, r'/video/([^\?]+)') or match1(url, r'video=([^\?]+)')
-    embed_url = 'http://www.dailymotion.com/embed/video/%s' % id
-    html = get_content(embed_url)
+    html = get_content(rebuilt_url(url))
+    info = json.loads(match1(html, r'qualities":({.+?}),"'))
+    title = match1(html, r'"video_title"\s*:\s*"([^"]+)"') or \
+            match1(html, r'"title"\s*:\s*"([^"]+)"')
+    title = unicodize(title)
 
-    info = json.loads(match1(html, r'var\s*info\s*=\s*({.+}),\n'))
+    for quality in ['1080','720','480','380','240','144','auto']:
+        try:
+            real_url = info[quality][1]["url"]
+            if real_url:
+                break
+        except KeyError:
+            pass
 
-    title = info['title']
+    mime, ext, size = url_info(real_url)
 
-    for quality in ['stream_h264_hd1080_url', 'stream_h264_hd_url', 'stream_h264_hq_url', 'stream_h264_url', 'stream_h264_ld_url']:
-        real_url = info[quality]
-        if real_url:
-            break
-
-    type, ext, size = url_info(real_url)
-
-    print_info(site_info, title, type, size)
+    print_info(site_info, title, mime, size)
     if not info_only:
-        download_urls([real_url], title, ext, size, output_dir, merge = merge)
+        download_urls([real_url], title, ext, size, **kwargs)
 
 site_info = "Dailymotion.com"
 download = dailymotion_download

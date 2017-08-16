@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
-from .common import match1, download_urls, parse_host, set_proxy, unset_proxy
+from .common import match1, maybe_print, download_urls, get_filename, parse_host, set_proxy, unset_proxy, get_content, dry_run
+from .common import print_more_compatible as print
 from .util import log
+from . import json_output
+import os
 
 class Extractor():
     def __init__(self, *args):
@@ -19,20 +22,30 @@ class VideoExtractor():
         self.url = None
         self.title = None
         self.vid = None
+        self.m3u8_url = None
         self.streams = {}
         self.streams_sorted = []
         self.audiolang = None
         self.password_protected = False
+        self.dash_streams = {}
+        self.caption_tracks = {}
+        self.out = False
+        self.ua = None
+        self.referer = None
+        self.danmuku = None
 
         if args:
             self.url = args[0]
 
     def download_by_url(self, url, **kwargs):
         self.url = url
+        self.vid = None
 
         if 'extractor_proxy' in kwargs and kwargs['extractor_proxy']:
             set_proxy(parse_host(kwargs['extractor_proxy']))
         self.prepare(**kwargs)
+        if self.out:
+            return
         if 'extractor_proxy' in kwargs and kwargs['extractor_proxy']:
             unset_proxy()
 
@@ -46,6 +59,7 @@ class VideoExtractor():
         self.download(**kwargs)
 
     def download_by_vid(self, vid, **kwargs):
+        self.url = None
         self.vid = vid
 
         if 'extractor_proxy' in kwargs and kwargs['extractor_proxy']:
@@ -72,7 +86,11 @@ class VideoExtractor():
         #raise NotImplementedError()
 
     def p_stream(self, stream_id):
-        stream = self.streams[stream_id]
+        if stream_id in self.streams:
+            stream = self.streams[stream_id]
+        else:
+            stream = self.dash_streams[stream_id]
+
         if 'itag' in stream:
             print("    - itag:          %s" % log.sprint(stream_id, log.NEGATIVE))
         else:
@@ -82,13 +100,17 @@ class VideoExtractor():
             print("      container:     %s" % stream['container'])
 
         if 'video_profile' in stream:
-            print("      video-profile: %s" % stream['video_profile'])
+            maybe_print("      video-profile: %s" % stream['video_profile'])
 
         if 'quality' in stream:
             print("      quality:       %s" % stream['quality'])
 
-        if 'size' in stream:
-            print("      size:          %s MiB (%s bytes)" % (round(stream['size'] / 1048576, 1), stream['size']))
+        if 'size' in stream and stream['container'].lower() != 'm3u8':
+            if stream['size'] != float('inf')  and stream['size'] != 0:
+                print("      size:          %s MiB (%s bytes)" % (round(stream['size'] / 1048576, 1), stream['size']))
+
+        if 'm3u8_url' in stream:
+            print("      m3u8_url:      {}".format(stream['m3u8_url']))
 
         if 'itag' in stream:
             print("    # download-with: %s" % log.sprint("you-get --itag=%s [URL]" % stream_id, log.UNDERLINE))
@@ -98,15 +120,19 @@ class VideoExtractor():
         print()
 
     def p_i(self, stream_id):
-        stream = self.streams[stream_id]
-        print("    - title:         %s" % self.title)
+        if stream_id in self.streams:
+            stream = self.streams[stream_id]
+        else:
+            stream = self.dash_streams[stream_id]
+
+        maybe_print("    - title:         %s" % self.title)
         print("       size:         %s MiB (%s bytes)" % (round(stream['size'] / 1048576, 1), stream['size']))
         print("        url:         %s" % self.url)
         print()
 
     def p(self, stream_id=None):
-        print("site:                %s" % self.__class__.name)
-        print("title:               %s" % self.title)
+        maybe_print("site:                %s" % self.__class__.name)
+        maybe_print("title:               %s" % self.title)
         if stream_id:
             # Print the stream
             print("stream:")
@@ -119,8 +145,16 @@ class VideoExtractor():
             self.p_stream(stream_id)
 
         elif stream_id == []:
-            # Print all available streams
             print("streams:             # Available quality and codecs")
+            # Print DASH streams
+            if self.dash_streams:
+                print("    [ DASH ] %s" % ('_' * 36))
+                itags = sorted(self.dash_streams,
+                               key=lambda i: -self.dash_streams[i]['size'])
+                for stream in itags:
+                    self.p_stream(stream)
+            # Print all other available streams
+            print("    [ DEFAULT ] %s" % ('_' * 33))
             for stream in self.streams_sorted:
                 self.p_stream(stream['id'] if 'id' in stream else stream['itag'])
 
@@ -131,12 +165,14 @@ class VideoExtractor():
                 print("      download-url:  {}\n".format(i['url']))
 
     def p_playlist(self, stream_id=None):
-        print("site:                %s" % self.__class__.name)
+        maybe_print("site:                %s" % self.__class__.name)
         print("playlist:            %s" % self.title)
         print("videos:")
 
     def download(self, **kwargs):
-        if 'info_only' in kwargs and kwargs['info_only']:
+        if 'json_output' in kwargs and kwargs['json_output']:
+            json_output.output(self)
+        elif 'info_only' in kwargs and kwargs['info_only']:
             if 'stream_id' in kwargs and kwargs['stream_id']:
                 # Display the stream
                 stream_id = kwargs['stream_id']
@@ -165,11 +201,47 @@ class VideoExtractor():
             else:
                 self.p_i(stream_id)
 
-            urls = self.streams[stream_id]['src']
+            if stream_id in self.streams:
+                urls = self.streams[stream_id]['src']
+                ext = self.streams[stream_id]['container']
+                total_size = self.streams[stream_id]['size']
+            else:
+                urls = self.dash_streams[stream_id]['src']
+                ext = self.dash_streams[stream_id]['container']
+                total_size = self.dash_streams[stream_id]['size']
+
+            if ext == 'm3u8':
+                ext = 'mp4'
+
             if not urls:
                 log.wtf('[Failed] Cannot extract video source.')
             # For legacy main()
-            download_urls(urls, self.title, self.streams[stream_id]['container'], self.streams[stream_id]['size'], output_dir=kwargs['output_dir'], merge=kwargs['merge'])
+            headers = {}
+            if self.ua is not None:
+                headers['User-Agent'] = self.ua
+            if self.referer is not None:
+                headers['Referer'] = self.referer
+            download_urls(urls, self.title, ext, total_size, headers=headers,
+                          output_dir=kwargs['output_dir'],
+                          merge=kwargs['merge'],
+                          av=stream_id in self.dash_streams)
+            if 'caption' not in kwargs or not kwargs['caption']:
+                print('Skipping captions or danmuku.')
+                return
+            for lang in self.caption_tracks:
+                filename = '%s.%s.srt' % (get_filename(self.title), lang)
+                print('Saving %s ... ' % filename, end="", flush=True)
+                srt = self.caption_tracks[lang]
+                with open(os.path.join(kwargs['output_dir'], filename),
+                          'w', encoding='utf-8') as x:
+                    x.write(srt)
+                print('Done.')
+            if self.danmuku is not None and not dry_run:
+                filename = '{}.cmt.xml'.format(get_filename(self.title))
+                print('Downloading {} ...\n'.format(filename))
+                with open(os.path.join(kwargs['output_dir'], filename), 'w', encoding='utf8') as fp:
+                    fp.write(self.danmuku)
+
             # For main_dev()
             #download_urls(urls, self.title, self.streams[stream_id]['container'], self.streams[stream_id]['size'])
 

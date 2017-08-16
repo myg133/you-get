@@ -3,96 +3,145 @@
 __all__ = ['qq_download']
 
 from ..common import *
-import uuid
-#QQMUSIC
-#SINGLE
-#1. http://y.qq.com/#type=song&mid=000A9lMb0iEqwN
-#2. http://y.qq.com/#type=song&id=4754713
-#3. http://s.plcloud.music.qq.com/fcgi-bin/fcg_yqq_song_detail_info.fcg?songmid=002NqCeX3owQIw
-#4. http://s.plcloud.music.qq.com/fcgi-bin/fcg_yqq_song_detail_info.fcg?songid=4754713
-#ALBUM
-#1. http://y.qq.com/y/static/album/3/c/00385vBa0n3O3c.html?pgv_ref=qqmusic.y.index.music.pic1
-#2. http://y.qq.com/#type=album&mid=004c62RC2uujor
-#MV
-#can download as video through qq_download_by_id
-#1. http://y.qq.com/y/static/mv/mv_play.html?vid=i0014ufczcw
+from ..util.log import *
+from .qie import download as qieDownload
+from .qie_video import download_by_url as qie_video_download
+from urllib.parse import urlparse,parse_qs
 
-def qq_download_by_id(id, title=None, output_dir='.', merge=True, info_only=False):
-    xml = get_html('http://www.acfun.tv/getinfo?vids=%s' % id)
-    from xml.dom.minidom import parseString
-    doc = parseString(xml)
-    doc_root = doc.getElementsByTagName('root')[0]
-    doc_vl = doc_root.getElementsByTagName('vl')[0]
-    doc_vi = doc_vl.getElementsByTagName('vi')[0]
-    fn = doc_vi.getElementsByTagName('fn')[0].firstChild.data
-    # fclip = doc_vi.getElementsByTagName('fclip')[0].firstChild.data
-    # fc=doc_vi.getElementsByTagName('fc')[0].firstChild.data
-    fvkey = doc_vi.getElementsByTagName('fvkey')[0].firstChild.data
-    doc_ul = doc_vi.getElementsByTagName('ul')
+def qq_download_by_vid(vid, title, output_dir='.', merge=True, info_only=False):
+    info_api = 'http://vv.video.qq.com/getinfo?otype=json&appver=3.2.19.333&platform=11&defnpayver=1&vid={}'.format(vid)
+    info = get_content(info_api)
+    video_json = json.loads(match1(info, r'QZOutputJson=(.*)')[:-1])
 
+    if video_json['exem'] != 0:
+        log.wtf(video_json['msg'])
+    fn_pre = video_json['vl']['vi'][0]['lnk']
+    title = video_json['vl']['vi'][0]['ti']
+    host = video_json['vl']['vi'][0]['ul']['ui'][0]['url']
+    streams = video_json['fl']['fi']
+    seg_cnt = video_json['vl']['vi'][0]['cl']['fc']
+    if seg_cnt == 0:
+        seg_cnt = 1
 
-    url = doc_ul[0].getElementsByTagName('url')[1].firstChild.data
+    best_quality = streams[-1]['name']
+    part_format_id = streams[-1]['id']
 
-    # print(i.firstChild.data)
-    urls=[]
-    ext=fn[-3:]
-    size=0
-    for i in doc.getElementsByTagName("cs"):
-        size+=int(i.firstChild.data)
+    part_urls= []
+    total_size = 0
+    for part in range(1, seg_cnt+1):
+        filename = fn_pre + '.p' + str(part_format_id % 10000) + '.' + str(part) + '.mp4'
+        key_api = "http://vv.video.qq.com/getkey?otype=json&platform=11&format={}&vid={}&filename={}&appver=3.2.19.333".format(part_format_id, vid, filename)
+        part_info = get_content(key_api)
+        key_json = json.loads(match1(part_info, r'QZOutputJson=(.*)')[:-1])
+        if key_json.get('key') is None:
+            log.w(key_json['msg'])
+            break
+        vkey = key_json['key']
+        url = '{}{}?vkey={}'.format(host, filename, vkey)
+        part_urls.append(url)
+        _, ext, size = url_info(url)
+        total_size += size
 
-    # size=sum(map(int,doc.getElementsByTagName("cs")))
-    locid=str(uuid.uuid4())
-    for i in doc.getElementsByTagName("ci"):
-        urls.append(url+fn[:-4] + "." + i.getElementsByTagName("idx")[0].firstChild.data + fn[-4:] + '?vkey=' + fvkey+ '&sdtfrom=v1000&type='+ fn[-3:0] +'&locid=' + locid + "&&level=1&platform=11&br=133&fmt=hd&sp=0")
-
-    # if int(fclip) > 0:
-    #     fn = fn[:-4] + "." + fclip + fn[-4:]
-    # url = url + fn + '?vkey=' + fvkey
-
-    # _, ext, size = url_info(url)
-
-    print_info(site_info, title, ext, size)
+    print_info(site_info, title, ext, total_size)
     if not info_only:
-        download_urls(urls, title, ext, size, output_dir=output_dir, merge=merge)
+        download_urls(part_urls, title, ext, total_size, output_dir=output_dir, merge=merge)
 
-def qq_download(url, output_dir = '.', merge = True, info_only = False):
-    if re.match(r'http://v.qq.com/([^\?]+)\?vid', url):
-        aid = r1(r'(.*)\.html', url)
-        vid = r1(r'http://v.qq.com/[^\?]+\?vid=(\w+)', url)
-        url = 'http://sns.video.qq.com/tvideo/fcgi-bin/video?vid=%s' % vid
+def kg_qq_download_by_shareid(shareid, output_dir='.', info_only=False, caption=False):
+    BASE_URL = 'http://cgi.kg.qq.com/fcgi-bin/kg_ugc_getdetail'
+    params_str = '?dataType=jsonp&jsonp=callback&jsonpCallback=jsopgetsonginfo&v=4&outCharset=utf-8&shareid=' + shareid
+    url = BASE_URL + params_str
+    content = get_content(url)
+    json_str = content[len('jsonpcallback('):-1]
+    json_data = json.loads(json_str)
 
-    if re.match(r'http://y.qq.com/([^\?]+)\?vid', url):
-        vid = r1(r'http://y.qq.com/[^\?]+\?vid=(\w+)', url)
+    playurl = json_data['data']['playurl']
+    videourl = json_data['data']['playurl_video']
+    real_url = playurl if playurl else videourl
+    real_url = real_url.replace('\/', '/')
 
-        url = "http://v.qq.com/page/%s.html" % vid
+    ksong_mid = json_data['data']['ksong_mid']
+    lyric_url = 'http://cgi.kg.qq.com/fcgi-bin/fcg_lyric?jsonpCallback=jsopgetlrcdata&outCharset=utf-8&ksongmid=' + ksong_mid 
+    lyric_data = get_content(lyric_url)
+    lyric_string = lyric_data[len('jsopgetlrcdata('):-1]
+    lyric_json = json.loads(lyric_string)
+    lyric = lyric_json['data']['lyric']
 
-        r_url = r1(r'<meta http-equiv="refresh" content="0;url=([^"]*)', get_html(url))
-        if r_url:
-            aid = r1(r'(.*)\.html', r_url)
-            url = "%s/%s.html" % (aid, vid)
+    title = match1(lyric, r'\[ti:([^\]]*)\]')
 
-    if re.match(r'http://static.video.qq.com/.*vid=', url):
-        vid = r1(r'http://static.video.qq.com/.*vid=(\w+)', url)
-        url = "http://v.qq.com/page/%s.html" % vid
+    type, ext, size = url_info(real_url)
+    if not title:
+        title = shareid
 
-    if re.match(r'http://v.qq.com/cover/.*\.html', url):
-        html = get_html(url)
-        vid = r1(r'vid:"([^"]+)"', html)
-        url = 'http://sns.video.qq.com/tvideo/fcgi-bin/video?vid=%s' % vid
+    print_info('腾讯全民K歌', title, type, size)
+    if not info_only:
+        download_urls([real_url], title, ext, size, output_dir, merge=False)
+        if caption:
+            caption_filename = title + '.lrc'
+            caption_path = output_dir + '/' + caption_filename
+            with open(caption_path, 'w') as f:
+                lrc_list = lyric.split('\r\n')
+                for line in lrc_list:
+                    f.write(line)
+                    f.write('\n')
 
-    html = get_html(url)
+def qq_download(url, output_dir='.', merge=True, info_only=False, **kwargs):
+    """"""
+    if re.match(r'https?://egame.qq.com/live\?anchorid=(\d+)', url):
+        from . import qq_egame
+        qq_egame.qq_egame_download(url, output_dir=output_dir, merge=merge, info_only=info_only, **kwargs)
+        return
 
-    title = match1(html, r'<title>(.+?)</title>', r'title:"([^"]+)"')[0].strip()
-    assert title
-    title = unescape_html(title)
-    title = escape_file_path(title)
+    if 'kg.qq.com' in url or 'kg2.qq.com' in url:
+        shareid = url.split('?s=')[-1]
+        caption = kwargs['caption']
+        kg_qq_download_by_shareid(shareid, output_dir=output_dir, info_only=info_only, caption=caption)
+        return
 
-    try:
-        id = vid
-    except:
-        id = r1(r'vid:"([^"]+)"', html)
+    if 'live.qq.com' in url:
+        if 'live.qq.com/video/v' in url:
+            qie_video_download(url, output_dir=output_dir, merge=merge, info_only=info_only, **kwargs)
+        else:
+            qieDownload(url, output_dir=output_dir, merge=merge, info_only=info_only)
+        return
 
-    qq_download_by_id(id, title, output_dir = output_dir, merge = merge, info_only = info_only)
+    if 'mp.weixin.qq.com/s?' in url:
+        content = get_content(url)
+        vids = matchall(content, [r'\?vid=(\w+)'])
+        for vid in vids:
+            qq_download_by_vid(vid, vid, output_dir, merge, info_only)
+        return
+
+    #do redirect
+    if 'v.qq.com/page' in url:
+        # for URLs like this:
+        # http://v.qq.com/page/k/9/7/k0194pwgw97.html
+        new_url = url_locations([url])[0]
+        if url == new_url:
+            #redirect in js?
+            content = get_content(url)
+            url = match1(content,r'window\.location\.href="(.*?)"')
+        else:
+            url = new_url
+
+    if 'kuaibao.qq.com' in url or re.match(r'http://daxue.qq.com/content/content/id/\d+', url):
+        content = get_content(url)
+        vid = match1(content, r'vid\s*=\s*"\s*([^"]+)"')
+        title = match1(content, r'title">([^"]+)</p>')
+        title = title.strip() if title else vid
+    elif 'iframe/player.html' in url:
+        vid = match1(url, r'\bvid=(\w+)')
+        # for embedded URLs; don't know what the title is
+        title = vid
+    else:
+        content = get_content(url)
+        vid = parse_qs(urlparse(url).query).get('vid') #for links specified vid  like http://v.qq.com/cover/p/ps6mnfqyrfo7es3.html?vid=q0181hpdvo5
+        vid = vid[0] if vid else match1(content, r'vid"*\s*:\s*"\s*([^"]+)"') #general fallback
+        title = match1(content,r'<a.*?id\s*=\s*"%s".*?title\s*=\s*"(.+?)".*?>'%vid)
+        title = match1(content, r'title">([^"]+)</p>') if not title else title
+        title = match1(content, r'"title":"([^"]+)"') if not title else title
+        title = vid if not title else title #general fallback
+
+    qq_download_by_vid(vid, title, output_dir, merge, info_only)
 
 site_info = "QQ.com"
 download = qq_download

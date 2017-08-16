@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 # This file is Python 2 compliant.
 
-from .. import __name__ as library_name
+from ..version import script_name
 
 import os, sys
 
-IS_ANSI_TERMINAL = os.getenv('TERM') in (
+TERM = os.getenv('TERM', '')
+IS_ANSI_TERMINAL = TERM in (
     'eterm-color',
     'linux',
     'screen',
     'vt100',
-    'xterm')
+) or TERM.startswith('xterm')
 
 # ANSI escape code
 # See <http://en.wikipedia.org/wiki/ANSI_escape_code>
@@ -70,7 +71,7 @@ def print_err(text, *colors):
 
 def print_log(text, *colors):
     """Print a log message to standard error."""
-    sys.stderr.write(sprint("{}: {}".format(library_name, text), *colors) + "\n")
+    sys.stderr.write(sprint("{}: {}".format(script_name, text), *colors) + "\n")
 
 def i(message):
     """Print a normal log message."""
@@ -88,10 +89,10 @@ def e(message, exit_code=None):
     """Print an error log message."""
     print_log(message, YELLOW, BOLD)
     if exit_code is not None:
-        exit(exit_code)
+        sys.exit(exit_code)
 
 def wtf(message, exit_code=1):
     """What a Terrible Failure!"""
     print_log(message, RED, BOLD)
     if exit_code is not None:
-        exit(exit_code)
+        sys.exit(exit_code)
