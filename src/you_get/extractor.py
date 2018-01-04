@@ -194,6 +194,7 @@ class VideoExtractor():
                 stream_id = kwargs['stream_id']
             else:
                 # Download stream with the best quality
+                from .processor.ffmpeg import has_ffmpeg_installed
                 stream_id = self.streams_sorted[0]['id'] if 'id' in self.streams_sorted[0] else self.streams_sorted[0]['itag']
 
             if 'index' not in kwargs:
@@ -244,5 +245,6 @@ class VideoExtractor():
 
             # For main_dev()
             #download_urls(urls, self.title, self.streams[stream_id]['container'], self.streams[stream_id]['size'])
-
-        self.__init__()
+        keep_obj = kwargs.get('keep_obj', False)
+        if not keep_obj:
+            self.__init__()

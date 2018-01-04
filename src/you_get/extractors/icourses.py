@@ -18,7 +18,7 @@ def icourses_download(url, output_dir='.', **kwargs):
         hit = re.search(r'id=(\d+)&courseId=(\d+)', url)
         url = 'http://www.icourses.cn/jpk/changeforVideo.action?resId={}&courseId={}'.format(hit.group(1), hit.group(2))
     if re.match(r'http://www.icourses.cn/coursestatic/course_(\d+).html', url):
-        raise Exception('You can donwload it with -l flag')
+        raise Exception('You can download it with -l flag')
     icourses_parser = ICousesExactor(url=url)
     icourses_parser.basic_extract()
     title = icourses_parser.title
@@ -42,7 +42,7 @@ def icourses_download(url, output_dir='.', **kwargs):
         real_url = icourses_parser.update_url(0)
         headers = fake_headers.copy()
         headers['Referer'] = url
-        download_urls_icourses(real_url, title, 'flv',total_size=size, output_dir=output_dir, max_size=15000000, dyn_callback=icourses_parser.update_url)
+        download_urls_icourses(real_url, title, 'flv',total_size=size, output_dir=output_dir, max_size=15728640, dyn_callback=icourses_parser.update_url)
     return
 
 
@@ -245,7 +245,7 @@ class ICousesExactor(object):
 
     def update_url(self, received):
         args = self.common_args.copy()
-        play_type = 'empty' if received else 'play'
+        play_type = 'seek' if received else 'play'
         received = received if received else -1
         args['ls'] = play_type
         args['start'] = received + 1

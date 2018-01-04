@@ -38,19 +38,30 @@ def fetch_cna():
 
 class Youku(VideoExtractor):
     name = "优酷 (Youku)"
-    mobile_ua = 'Mozilla/5.0 (iPad; CPU OS 10_1_1 like Mac OS X) AppleWebKit/602.2.14 (KHTML, like Gecko) Mobile/14B100'
+    mobile_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.101 Safari/537.36'
+    dispatcher_url = 'vali.cp31.ott.cibntv.net'
 
-    # Last updated: 2015-11-24
+    # Last updated: 2017-10-13
     stream_types = [
-        {'id': 'mp4hd3', 'alias-of': 'hd3'},
-        {'id': 'hd3',    'container': 'flv', 'video_profile': '1080P'},
-        {'id': 'mp4hd2', 'alias-of': 'hd2'},
-        {'id': 'hd2',    'container': 'flv', 'video_profile': '超清'},
-        {'id': 'mp4hd',  'alias-of': 'mp4'},
-        {'id': 'mp4',    'container': 'mp4', 'video_profile': '高清'},
-        {'id': 'flvhd',  'container': 'flv', 'video_profile': '标清'},
-        {'id': 'flv',    'container': 'flv', 'video_profile': '标清'},
-        {'id': '3gphd',  'container': 'mp4', 'video_profile': '标清（3GP）'},
+        {'id': 'hd3',      'container': 'flv', 'video_profile': '1080P'},
+        {'id': 'hd3v2',    'container': 'flv', 'video_profile': '1080P'},
+        {'id': 'mp4hd3',   'container': 'mp4', 'video_profile': '1080P'},
+        {'id': 'mp4hd3v2', 'container': 'mp4', 'video_profile': '1080P'},
+
+        {'id': 'hd2',      'container': 'flv', 'video_profile': '超清'},
+        {'id': 'hd2v2',    'container': 'flv', 'video_profile': '超清'},
+        {'id': 'mp4hd2',   'container': 'mp4', 'video_profile': '超清'},
+        {'id': 'mp4hd2v2', 'container': 'mp4', 'video_profile': '超清'},
+
+        {'id': 'mp4hd',    'container': 'mp4', 'video_profile': '高清'},
+        # not really equivalent to mp4hd
+        {'id': 'flvhd',    'container': 'flv', 'video_profile': '渣清'},
+        {'id': '3gphd',    'container': 'mp4', 'video_profile': '渣清'},
+
+        {'id': 'mp4sd',    'container': 'mp4', 'video_profile': '标清'},
+        # obsolete?
+        {'id': 'flv',      'container': 'flv', 'video_profile': '标清'},
+        {'id': 'mp4',      'container': 'mp4', 'video_profile': '标清'},
     ]
 
     def __init__(self):
@@ -61,12 +72,13 @@ class Youku(VideoExtractor):
 
         self.page = None
         self.video_list = None
+        self.video_next = None
         self.password = None
         self.api_data = None
         self.api_error_code = None
         self.api_error_msg = None
 
-        self.ccode = '0401'
+        self.ccode = '0512'
         self.utid = None
 
     def youku_ups(self):
@@ -88,6 +100,23 @@ class Youku(VideoExtractor):
         if 'videos' in self.api_data:
             if 'list' in self.api_data['videos']:
                 self.video_list = self.api_data['videos']['list']
+            if 'next' in self.api_data['videos']:
+                self.video_next = self.api_data['videos']['next']
+
+    @classmethod
+    def change_cdn(cls, url):
+        # if the cnd_url starts with an ip addr, it should be youku's old CDN
+        # which rejects http requests randomly with status code > 400
+        # change it to the dispatcher of aliCDN can do better
+        # at least a little more recoverable from HTTP 403
+        if cls.dispatcher_url in url:
+            return url
+        elif 'k.youku.com' in url:
+            return url
+        else:
+            url_seg_list = list(urllib.parse.urlsplit(url))
+            url_seg_list[1] = cls.dispatcher_url
+            return urllib.parse.urlunsplit(url_seg_list)
 
     def get_vid_from_url(self):
         # It's unreliable. check #1633
@@ -125,13 +154,14 @@ class Youku(VideoExtractor):
                     log.wtf('Cannot fetch vid')
 
         if kwargs.get('src') and kwargs['src'] == 'tudou':
-            self.ccode = '0402'
+            self.ccode = '0512'
 
         if kwargs.get('password') and kwargs['password']:
             self.password_protected = True
             self.password = kwargs['password']
 
         self.utid = fetch_cna()
+        time.sleep(3)
         self.youku_ups()
 
         if self.api_data.get('stream') is None:
@@ -179,7 +209,7 @@ class Youku(VideoExtractor):
                     src = []
                     for seg in stream['segs']:
                         if seg.get('cdn_url'):
-                            src.append(seg['cdn_url'])
+                            src.append(self.__class__.change_cdn(seg['cdn_url']))
                         else:
                             is_preview = True
                     self.streams[stream_id]['src'] = src
@@ -191,7 +221,7 @@ class Youku(VideoExtractor):
                     src = []
                     for seg in stream['segs']:
                         if seg.get('cdn_url'):
-                            src.append(seg['cdn_url'])
+                            src.append(self.__class__.change_cdn(seg['cdn_url']))
                         else:
                             is_preview = True
                     self.streams[stream_id]['src'].extend(src)
@@ -214,12 +244,24 @@ def youku_download_playlist_by_url(url, **kwargs):
         youku_obj = Youku()
         youku_obj.url = url
         youku_obj.prepare(**kwargs)
+        total_episode = None
+        try:
+            total_episode = youku_obj.api_data['show']['episode_total']
+        except KeyError:
+            log.wtf('Cannot get total_episode for {}'.format(url))
+        next_vid = youku_obj.vid
+        for _ in range(total_episode):
+            this_extractor = Youku()
+            this_extractor.download_by_vid(next_vid, keep_obj=True, **kwargs)
+            next_vid = this_extractor.video_next['encodevid']
+        '''
         if youku_obj.video_list is None:
             log.wtf('Cannot find video list for {}'.format(url))
         else:
             vid_list = [v['encodevid'] for v in youku_obj.video_list]
             for v in vid_list:
-                youku_obj.download_by_vid(v, **kwargs)
+                Youku().download_by_vid(v, **kwargs)
+        '''
 
     elif re.match('https?://list.youku.com/show/id_', url):
         # http://list.youku.com/show/id_z2ae8ee1c837b11e18195.html

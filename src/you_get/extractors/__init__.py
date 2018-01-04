@@ -11,12 +11,15 @@ from .bokecc import *
 from .cbs import *
 from .ckplayer import *
 from .cntv import *
+from .coub import *
 from .dailymotion import *
 from .dilidili import *
 from .douban import *
+from .douyin import *
 from .douyutv import *
 from .ehow import *
 from .facebook import *
+from .fantasy import *
 from .fc2video import *
 from .flickr import *
 from .freesound import *
@@ -55,6 +58,7 @@ from .pinterest import *
 from .pixnet import *
 from .pptv import *
 from .qie import *
+from .qingting import *
 from .qq import *
 from .showroom import *
 from .sina import *
@@ -82,3 +86,4 @@ from .youtube import *
 from .ted import *
 from .khan import *
 from .zhanqi import *
+from .kuaishou import *

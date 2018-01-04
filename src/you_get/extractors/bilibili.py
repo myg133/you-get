@@ -25,11 +25,14 @@ class Bilibili(VideoExtractor):
     live_api = 'http://live.bilibili.com/api/playurl?cid={}&otype=json'
     api_url = 'http://interface.bilibili.com/playurl?'
     bangumi_api_url = 'http://bangumi.bilibili.com/player/web_api/playurl?'
-    
+    live_room_init_api_url = 'https://api.live.bilibili.com/room/v1/Room/room_init?id={}'
+    live_room_info_api_url = 'https://api.live.bilibili.com/room/v1/Room/get_info?room_id={}'
+
     SEC1 = '1c15888dc316e05a15fdd0a02ed6584f'
     SEC2 = '9b288147e5474dd2aa67085f716c560d'
     stream_types = [
             {'id': 'hdflv'},
+            {'id': 'flv720'},
             {'id': 'flv'},
             {'id': 'hdmp4'},
             {'id': 'mp4'},
@@ -41,24 +44,27 @@ class Bilibili(VideoExtractor):
     @staticmethod
     def bilibili_stream_type(urls):
         url = urls[0]
-        if 'hd.flv?' in url:
+        if 'hd.flv' in url or '-112.flv' in url:
             return 'hdflv', 'flv'
-        if '.flv?' in url:
+        if '-64.flv' in url:
+            return 'flv720', 'flv'
+        if '.flv' in url:
             return 'flv', 'flv'
-        if 'hd.mp4?' in url:
+        if 'hd.mp4' in url or '-48.mp4' in url:
             return 'hdmp4', 'mp4'
-        if '.mp4?' in url:
+        if '.mp4' in url:
             return 'mp4', 'mp4'
         raise Exception('Unknown stream type')
 
-    def api_req(self, cid, quality, bangumi):
+    def api_req(self, cid, quality, bangumi, bangumi_movie=False, **kwargs):
         ts = str(int(time.time()))
         if not bangumi:
             params_str = 'cid={}&player=1&quality={}&ts={}'.format(cid, quality, ts)
             chksum = hashlib.md5(bytes(params_str+self.SEC1, 'utf8')).hexdigest()
             api_url = self.api_url + params_str + '&sign=' + chksum
         else:
-            params_str = 'cid={}&module=bangumi&player=1&quality={}&ts={}'.format(cid, quality, ts)
+            mod = 'movie' if bangumi_movie else 'bangumi'
+            params_str = 'cid={}&module={}&player=1&quality={}&ts={}'.format(cid, mod, quality, ts)
             chksum = hashlib.md5(bytes(params_str+self.SEC2, 'utf8')).hexdigest()
             api_url = self.bangumi_api_url + params_str + '&sign=' + chksum
 
@@ -84,29 +90,32 @@ class Bilibili(VideoExtractor):
 
     def download_by_vid(self, cid, bangumi, **kwargs):
         stream_id = kwargs.get('stream_id')
-# guard here. if stream_id invalid, fallback as not stream_id
+        # guard here. if stream_id invalid, fallback as not stream_id
         if stream_id and stream_id in self.fmt2qlt:
             quality = stream_id
         else:
             quality = 'hdflv' if bangumi else 'flv'
 
         info_only = kwargs.get('info_only')
-        if not info_only or stream_id:
-# won't be None
-            qlt = self.fmt2qlt.get(quality)
-            api_xml = self.api_req(cid, qlt, bangumi)
+        for qlt in range(4, -1, -1):
+            api_xml = self.api_req(cid, qlt, bangumi, **kwargs)
             self.parse_bili_xml(api_xml)
+        if not info_only or stream_id:
             self.danmuku = get_danmuku_xml(cid)
-        else:
-            for qlt in range(4, 0, -1):
-                api_xml = self.api_req(cid, qlt, bangumi)
-                self.parse_bili_xml(api_xml)
 
     def prepare(self, **kwargs):
+        if socket.getdefaulttimeout() == 600: # no timeout specified
+            socket.setdefaulttimeout(2) # fail fast, very speedy!
+
+        # handle "watchlater" URLs
+        if '/watchlater/' in self.url:
+            aid = re.search(r'av(\d+)', self.url).group(1)
+            self.url = 'http://www.bilibili.com/video/av{}/'.format(aid)
+
         self.ua = fake_headers['User-Agent']
         self.url = url_locations([self.url])[0]
         frag = urllib.parse.urlparse(self.url).fragment
-# http://www.bilibili.com/video/av3141144/index_2.html#page=3
+        # http://www.bilibili.com/video/av3141144/index_2.html#page=3
         if frag:
             hit = re.search(r'page=(\d+)', frag)
             if hit is not None:
@@ -115,13 +124,18 @@ class Bilibili(VideoExtractor):
                 self.url = 'http://www.bilibili.com/video/av{}/index_{}.html'.format(aid, page)
         self.referer = self.url
         self.page = get_content(self.url)
-        try:
-            self.title = re.search(r'<h1\s*title="([^"]+)"', self.page).group(1)
-            if 'subtitle' in kwargs:
-                subtitle = kwargs['subtitle']
-                self.title = '{} {}'.format(self.title, subtitle)
-        except Exception:
-            pass
+
+        m = re.search(r'<h1.*?>(.*?)</h1>', self.page)
+        if m is not None:
+            self.title = m.group(1)
+        if self.title is None:
+            m = re.search(r'<meta property="og:title" content="([^"]+)">', self.page)
+            if m is not None:
+                self.title = m.group(1)
+        if 'subtitle' in kwargs:
+            subtitle = kwargs['subtitle']
+            self.title = '{} {}'.format(self.title, subtitle)
+
         if 'bangumi.bilibili.com/movie' in self.url:
             self.movie_entry(**kwargs)
         elif 'bangumi.bilibili.com' in self.url:
@@ -137,12 +151,12 @@ class Bilibili(VideoExtractor):
         patt = r"var\s*aid\s*=\s*'(\d+)'"
         aid = re.search(patt, self.page).group(1)
         page_list = json.loads(get_content('http://www.bilibili.com/widget/getPageList?aid={}'.format(aid)))
+        # better ideas for bangumi_movie titles?
         self.title = page_list[0]['pagename']
-# False for is_bangumi, old interface works for all free items
-        self.download_by_vid(page_list[0]['cid'], False, **kwargs)
+        self.download_by_vid(page_list[0]['cid'], True, bangumi_movie=True, **kwargs)
 
     def entry(self, **kwargs):
-# tencent player
+        # tencent player
         tc_flashvars = re.search(r'"bili-cid=\d+&bili-aid=\d+&vid=([^"]+)"', self.page)
         if tc_flashvars:
             tc_flashvars = tc_flashvars.group(1)
@@ -151,11 +165,18 @@ class Bilibili(VideoExtractor):
             qq_download_by_vid(tc_flashvars, self.title, output_dir=kwargs['output_dir'], merge=kwargs['merge'], info_only=kwargs['info_only'])
             return
 
-        cid = re.search(r'cid=(\d+)', self.page).group(1)
+        has_plist = re.search(r'<option', self.page)
+        if has_plist and r1('index_(\d+).html', self.url) is None:
+            log.w('This page contains a playlist. (use --playlist to download all videos.)')
+
+        try:
+            cid = re.search(r'cid=(\d+)', self.page).group(1)
+        except:
+            cid = re.search(r'"cid":(\d+)', self.page).group(1)
         if cid is not None:
-            self.download_by_vid(cid, False, **kwargs)
+            self.download_by_vid(cid, re.search('bangumi', self.url) is not None, **kwargs)
         else:
-# flashvars?
+            # flashvars?
             flashvars = re.search(r'flashvars="([^"]+)"', self.page).group(1)
             if flashvars is None:
                 raise Exception('Unsupported page {}'.format(self.url))
@@ -174,8 +195,17 @@ class Bilibili(VideoExtractor):
             return
 
     def live_entry(self, **kwargs):
-        self.title = re.search(r'<title>([^<]+)', self.page).group(1)
-        self.room_id = re.search('ROOMID\s*=\s*(\d+)', self.page).group(1)
+        # Extract room ID from the short display ID (seen in the room
+        # URL). The room ID is usually the same as the short ID, but not
+        # always; case in point: https://live.bilibili.com/48, with 48
+        # as the short ID and 63727 as the actual ID.
+        room_short_id = re.search(r'live.bilibili.com/([^?]+)', self.url).group(1)
+        room_init_api_response = json.loads(get_content(self.live_room_init_api_url.format(room_short_id)))
+        self.room_id = room_init_api_response['data']['room_id']
+
+        room_info_api_response = json.loads(get_content(self.live_room_info_api_url.format(self.room_id)))
+        self.title = room_info_api_response['data']['title']
+
         api_url = self.live_api.format(self.room_id)
         json_data = json.loads(get_content(api_url))
         urls = [json_data['durl'][0]['url']]
@@ -226,7 +256,6 @@ class Bilibili(VideoExtractor):
         cid = ep_info['danmaku']
 
         self.title = '{} [{} {}]'.format(self.title, index_title, long_title)
-        print(self.title)
         self.download_by_vid(cid, bangumi=True, **kwargs)
 
 
@@ -303,7 +332,7 @@ def parse_cid_playurl(xml):
 
 def bilibili_download_playlist_by_url(url, **kwargs):
     url = url_locations([url])[0]
-# a bangumi here? possible?
+    # a bangumi here? possible?
     if 'live.bilibili' in url:
         site.download_by_url(url)
     elif 'bangumi.bilibili' in url:
