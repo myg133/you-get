@@ -6,9 +6,7 @@ from you_get.extractors import (
     imgur,
     magisto,
     youtube,
-    yixia,
     bilibili,
-    douyin,
 )
 
 
@@ -32,21 +30,6 @@ class YouGetTests(unittest.TestCase):
             'http://www.youtube.com/attribution_link?u=/watch?v%3DldAKIzq7bvs%26feature%3Dshare',  # noqa
             info_only=True
         )
-
-    def test_yixia(self):
-        yixia.download(
-            'http://m.miaopai.com/show/channel/vlvreCo4OZiNdk5Jn1WvdopmAvdIJwi8',  # noqa
-            info_only=True
-        )
-
-    def test_bilibili(self):
-        bilibili.download(
-            'https://www.bilibili.com/video/av16907446/', info_only=True
-        )
-        bilibili.download(
-            'https://www.bilibili.com/video/av13228063/', info_only=True
-        )
-
 
 if __name__ == '__main__':
     unittest.main()
