@@ -18,6 +18,8 @@ class Extractor():
             self.url = args[0]
 
 class VideoExtractor():
+    name = None
+    stream_types = []
     def __init__(self, *args):
         self.url = None
         self.title = None
@@ -25,7 +27,7 @@ class VideoExtractor():
         self.m3u8_url = None
         self.streams = {}
         self.streams_sorted = []
-        self.audiolang = None
+        self.audiolang = []
         self.password_protected = False
         self.dash_streams = {}
         self.caption_tracks = {}
@@ -158,7 +160,7 @@ class VideoExtractor():
             for stream in self.streams_sorted:
                 self.p_stream(stream['id'] if 'id' in stream else stream['itag'])
 
-        if self.audiolang:
+        if len(self.audiolang) > 0:
             print("audio-languages:")
             for i in self.audiolang:
                 print("    - lang:          {}".format(i['lang']))
@@ -194,7 +196,6 @@ class VideoExtractor():
                 stream_id = kwargs['stream_id']
             else:
                 # Download stream with the best quality
-                from .processor.ffmpeg import has_ffmpeg_installed
                 stream_id = self.streams_sorted[0]['id'] if 'id' in self.streams_sorted[0] else self.streams_sorted[0]['itag']
 
             if 'index' not in kwargs:

@@ -490,7 +490,7 @@ def url_size(url, faker=False, headers={}):
         response = urlopen_with_retry(request.Request(url, headers=headers))
     else:
         response = urlopen_with_retry(url)
-
+    
     size = response.headers['content-length']
     return int(size) if size is not None else float('inf')
 
@@ -729,6 +729,136 @@ def url_save(
         os.remove(filepath)
     os.rename(temp_filepath, filepath)
 
+def url_save_m3u8(
+    url, filepath, bar, refer=None, is_part=False, faker=False,
+    headers=None, timeout=None, **kwargs
+):
+    tmp_headers = headers.copy() if headers is not None else {}
+    # When a referer specified with param refer,
+    # the key must be 'Referer' for the hack here
+    if refer is not None:
+        tmp_headers['Referer'] = refer
+    if faker:
+        response = urlopen_with_retry(
+            request.Request(url, headers=fake_headers)
+        )
+    elif tmp_headers:
+        response = urlopen_with_retry(request.Request(url, headers=tmp_headers))
+    else:
+        response = urlopen_with_retry(url)
+
+    size = response.headers['content-length'] 
+    file_size = int(size) if size is not None else float('inf')
+    continue_renameing = True
+    while continue_renameing:
+        continue_renameing = False
+        if os.path.exists(filepath):
+            if not force and file_size == os.path.getsize(filepath):
+                if not is_part:
+                    if bar:
+                        bar.done()
+                    print(
+                        'Skipping {}: file already exists'.format(
+                            tr(os.path.basename(filepath))
+                        )
+                    )
+                else:
+                    if bar:
+                        bar.update_received(file_size)
+                return
+            else:
+                if not is_part:
+                    if bar:
+                        bar.done()
+                    if not force and auto_rename:
+                        path, ext = os.path.basename(filepath).rsplit('.', 1)
+                        finder = re.compile(' \([1-9]\d*?\)$')
+                        if (finder.search(path) is None):
+                            thisfile = path + ' (1).' + ext
+                        else:
+                            def numreturn(a):
+                                return ' (' + str(int(a.group()[2:-1]) + 1) + ').'
+                            thisfile = finder.sub(numreturn, path) + ext
+                        filepath = os.path.join(os.path.dirname(filepath), thisfile)
+                        print('Changing name to %s' % tr(os.path.basename(filepath)), '...')
+                        continue_renameing = True
+                        continue
+                    print('Overwriting %s' % tr(os.path.basename(filepath)), '...')
+        elif not os.path.exists(os.path.dirname(filepath)):
+            os.mkdir(os.path.dirname(filepath))
+
+    temp_filepath = filepath + '.download' if file_size != float('inf') \
+        else filepath
+    received = 0
+    if not force:
+        open_mode = 'ab'
+
+        if os.path.exists(temp_filepath):
+            received += os.path.getsize(temp_filepath)
+            if bar:
+                bar.update_received(os.path.getsize(temp_filepath))
+    else:
+        open_mode = 'wb'
+
+    if received < file_size:
+        '''
+        if parameter headers passed in, we have it copied as tmp_header
+        elif headers:
+            headers = headers
+        else:
+            headers = {}
+        '''
+        try:
+            range_start = int(
+                response.headers[
+                    'content-range'
+                ][6:].split('/')[0].split('-')[0]
+            )
+            end_length = int(
+                response.headers['content-range'][6:].split('/')[1]
+            )
+            range_length = end_length - range_start
+        except:
+            content_length = response.headers['content-length']
+            range_length = int(content_length) if content_length is not None \
+                else float('inf')
+
+        if file_size != received + range_length:
+            received = 0
+            if bar:
+                bar.received = 0
+            open_mode = 'wb'
+
+        with open(temp_filepath, open_mode) as output:
+            while True:
+                buffer = None
+                try:
+                    buffer = response.read(1024 * 256)
+                except socket.timeout:
+                    pass
+                if not buffer:
+                    if received == file_size:  # Download finished
+                        break
+                    # Unexpected termination. Retry request
+                    tmp_headers['Range'] = 'bytes=' + str(received) + '-'
+                    response = urlopen_with_retry(
+                        request.Request(url, headers=tmp_headers)
+                    )
+                    continue
+                output.write(buffer)
+                received += len(buffer)
+                if bar:
+                    bar.update_received(len(buffer))
+
+    assert received == os.path.getsize(temp_filepath), '%s == %s == %s' % (
+        received, os.path.getsize(temp_filepath), temp_filepath
+    )
+
+    if os.access(filepath, os.W_OK):
+        # on Windows rename could fail if destination filepath exists
+        os.remove(filepath)
+    os.rename(temp_filepath, filepath)
+
 
 class SimpleProgressBar:
     term_size = term.get_terminal_size()[1]
@@ -892,7 +1022,7 @@ def download_urls(
         launch_player(player, urls)
         return
 
-    if not total_size:
+    if not total_size and not ext == "ts":
         try:
             total_size = urls_size(urls, faker=faker, headers=headers)
         except:
@@ -922,6 +1052,21 @@ def download_urls(
             url, output_filepath, bar, refer=refer, faker=faker,
             headers=headers, **kwargs
         )
+        bar.done()
+    elif ext == "ts":
+        parts = []
+        print('Downloading %s.%s ...' % (tr(title), ext))
+        bar.update()
+        for i, url in enumerate(urls):
+            filename = '%s[%02d].%s' % (title, i, ext)
+            filepath = os.path.join(output_dir, filename)
+            parts.append(filepath)
+            # print 'Downloading %s [%s/%s]...' % (tr(filename), i + 1, len(urls))
+            bar.update_piece(i + 1)
+            url_save_m3u8(
+                url, filepath, bar, refer=refer, is_part=True, faker=faker,
+                headers=headers, **kwargs
+            )
         bar.done()
     else:
         parts = []
@@ -1570,7 +1715,12 @@ def google_search(url):
     return(videos[0][0])
 
 
-def url_to_module(url):
+def url_to_module(origin_url):
+    url = origin_url
+    propties = origin_url.split("!!")
+    if len(propties)>0:
+        url = propties[0]
+
     try:
         video_host = r1(r'https?://([^/]+)/', url)
         video_url = r1(r'https?://[^/]+(.*)', url)
@@ -1605,7 +1755,7 @@ def url_to_module(url):
         if location and location != url and not location.startswith('/'):
             return url_to_module(location)
         else:
-            return import_module('you_get.extractors.universal'), url
+            return import_module('you_get.extractors.universal'), origin_url
 
 
 def any_download(url, **kwargs):

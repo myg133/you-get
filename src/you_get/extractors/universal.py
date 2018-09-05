@@ -5,7 +5,32 @@ __all__ = ['universal_download']
 from ..common import *
 from .embed import *
 
-def universal_download(url, output_dir='.', merge=True, info_only=False, **kwargs):
+def get_m3u8_files(url):
+    urls = general_m3u8_extractor(url)
+    if len(urls)==1:
+        urls = get_m3u8_files(urls[0])
+    return urls
+
+def universal_download(origin_url, output_dir='.', merge=True, info_only=False, **kwargs):
+    url = origin_url
+    if r1(r'.*(\.m3u8).*',origin_url): #m3u8 Url
+        global output_filename
+        title = output_filename
+        propties = origin_url.split("!!")
+        url = propties[0]
+        if len(propties)>0:
+            title = propties[-1]
+        if not title:
+            raise ("output-filename is required when download m3u8\n"
+            " or add filename to the head of url,\n"
+            " and name can not be chinese, like:\n"
+            " http://xxxx.m3u8!!aa")
+        if os.path.exists(os.path.join(output_dir, title+".mkv")):
+            return 
+        urls = get_m3u8_files(url)
+        download_urls(urls, title, 'ts', 0, output_dir, merge=True)
+        return
+
     try:
         content_type = get_head(url, headers=fake_headers)['Content-Type']
     except:
