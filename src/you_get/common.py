@@ -1079,6 +1079,7 @@ def download_urls(
                 bar.update_piece(i + 1)
                 # if the part file has done
                 if os.path.exists(filepath):
+                    local_parts = []
                     continue
                 if len(local_parts) == max_workers or i == len(urls)-1:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
