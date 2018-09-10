@@ -1053,21 +1053,6 @@ def download_urls(
             headers=headers, **kwargs
         )
         bar.done()
-    elif ext == "ts":
-        parts = []
-        print('Downloading %s.%s ...' % (tr(title), ext))
-        bar.update()
-        for i, url in enumerate(urls):
-            filename = '%s[%02d].%s' % (title, i, ext)
-            filepath = os.path.join(output_dir, filename)
-            parts.append(filepath)
-            # print 'Downloading %s [%s/%s]...' % (tr(filename), i + 1, len(urls))
-            bar.update_piece(i + 1)
-            url_save_m3u8(
-                url, filepath, bar, refer=refer, is_part=True, faker=faker,
-                headers=headers, **kwargs
-            )
-        bar.done()
     else:
         parts = []
         print('Downloading %s.%s ...' % (tr(title), ext))
@@ -1078,10 +1063,19 @@ def download_urls(
             parts.append(filepath)
             # print 'Downloading %s [%s/%s]...' % (tr(filename), i + 1, len(urls))
             bar.update_piece(i + 1)
-            url_save(
-                url, filepath, bar, refer=refer, is_part=True, faker=faker,
-                headers=headers, **kwargs
-            )
+            # if the part file has done
+            if os.path.exists(filepath):
+                continue
+            if ext == "ts":
+                url_save_m3u8(
+                    url, filepath, bar, refer=refer, is_part=True, faker=faker,
+                    headers=headers, **kwargs
+                )
+            else:
+                url_save(
+                    url, filepath, bar, refer=refer, is_part=True, faker=faker,
+                    headers=headers, **kwargs
+                )
         bar.done()
 
         if not merge:
