@@ -129,7 +129,7 @@ def ffmpeg_concat_ts_to_mkv(files, output='output.mkv'):
         else:
             return False
     except:
-        return False
+        raise ""
 
 def ffmpeg_concat_flv_to_mp4(files, output='output.mp4'):
     print('Merging video parts... ', end="", flush=True)
