@@ -1107,8 +1107,12 @@ def download_urls(
         if not merge:
             print()
             return
-        _merge(parts,output_filepath,output_filename,ext,**kwargs)
-
+        try:
+            _merge(parts,output_filepath,output_filename,ext,**kwargs)
+        except:
+            download_urls(
+                urls, title, ext, total_size, output_dir='.', refer=None, merge=True,
+                faker=False, headers={}, **kwargs)
     print()
 
 def _merge(parts,output_filepath,output_filename,ext,**kwargs):
