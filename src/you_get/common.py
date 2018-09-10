@@ -1069,9 +1069,9 @@ def download_urls(
                 # print 'Downloading %s [%s/%s]...' % (tr(filename), i + 1, len(urls))
                 bar.update_piece(i + 1)
                 # if the part file has done
-                if os.path.exists(filepath):
-                    continue
-                else:
+                # 最后一个如果存在，则local_parts下载被跳过
+                    
+                if not os.path.exists(filepath):
                     local_parts.append({
                         "filepath":filepath,
                         "url":url,
@@ -1081,6 +1081,9 @@ def download_urls(
                         "headers":headers,
                         "kwargs": kwargs
                         })
+                elif not i == len(urls)-1: # 不是最后一个都跳过
+                    continue
+
                 if len(local_parts) == max_workers or i == len(urls)-1:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                         futs = {executor.submit(url_save_m3u8,part["url"],part["filepath"], bar, refer=refer, is_part=True, faker=faker,
@@ -1109,6 +1112,11 @@ def download_urls(
     print()
 
 def _merge(parts,output_filepath,output_filename,ext,**kwargs):
+
+    for part in parts:
+        if not os.path.exists(part) or not os.path.isfile(part):
+            raise Exception("file is not exists %s"%part)
+
     if 'av' in kwargs and kwargs['av']:
         from .processor.ffmpeg import has_ffmpeg_installed
         if has_ffmpeg_installed():

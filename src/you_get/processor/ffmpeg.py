@@ -119,8 +119,7 @@ def ffmpeg_concat_ts_to_mkv(files, output='output.mkv'):
     params = [FFMPEG] + LOGLEVEL + ['-isync', '-y', '-i']
     params.append('concat:')
     for file in files:
-        if os.path.isfile(file):
-            params[-1] += file + '|'
+        params[-1] += file + '|'
     params += ['-f', 'matroska', '-c', 'copy', output]
 
     try:
