@@ -1061,7 +1061,7 @@ def download_urls(
         if ext == "ts":  # m3u8 下载 使用多线程
             # 临时parts切片，用来进行异步下载
             local_parts = []
-            max_workers = 30
+            max_workers = 10
             for i, url in enumerate(urls):
                 filename = '%s[%02d].%s' % (title, i, ext)
                 filepath = os.path.join(output_dir, filename)
