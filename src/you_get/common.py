@@ -732,7 +732,7 @@ def url_save(
 
 def url_save_m3u8(
     url, filepath, bar, refer=None, is_part=False, faker=False,
-    headers=None, timeout=None, **kwargs
+    headers=None, timeout=20, **kwargs
 ):
     tmp_headers = headers.copy() if headers is not None else {}
     # When a referer specified with param refer,
@@ -741,12 +741,12 @@ def url_save_m3u8(
         tmp_headers['Referer'] = refer
     if faker:
         response = urlopen_with_retry(
-            request.Request(url, headers=fake_headers)
+            request.Request(url, headers=fake_headers),timeout=timeout
         )
     elif tmp_headers:
-        response = urlopen_with_retry(request.Request(url, headers=tmp_headers))
+        response = urlopen_with_retry(request.Request(url, headers=tmp_headers),timeout=timeout)
     else:
-        response = urlopen_with_retry(url)
+        response = urlopen_with_retry(url,timeout=timeout)
 
     size = response.headers['content-length'] 
     file_size = int(size) if size is not None else float('inf')
@@ -834,7 +834,7 @@ def url_save_m3u8(
             while True:
                 buffer = None
                 try:
-                    buffer = response.read(1024 * 256)
+                    buffer = response.read(1024 * 1024)
                 except socket.timeout:
                     pass
                 if not buffer:
@@ -843,7 +843,7 @@ def url_save_m3u8(
                     # Unexpected termination. Retry request
                     tmp_headers['Range'] = 'bytes=' + str(received) + '-'
                     response = urlopen_with_retry(
-                        request.Request(url, headers=tmp_headers)
+                        request.Request(url, headers=tmp_headers),timeout=timeout
                     )
                     continue
                 output.write(buffer)
@@ -1066,21 +1066,21 @@ def download_urls(
                 filename = '%s[%02d].%s' % (title, i, ext)
                 filepath = os.path.join(output_dir, filename)
                 parts.append(filepath)
-                local_parts.append({
-                    "filepath":filepath,
-                    "url":url,
-                    "bar":bar,
-                    "refer":refer,
-                    "faker":faker,
-                    "headers":headers,
-                    "kwargs": kwargs
-                    })
                 # print 'Downloading %s [%s/%s]...' % (tr(filename), i + 1, len(urls))
                 bar.update_piece(i + 1)
                 # if the part file has done
                 if os.path.exists(filepath):
-                    local_parts = []
                     continue
+                else:
+                    local_parts.append({
+                        "filepath":filepath,
+                        "url":url,
+                        "bar":bar,
+                        "refer":refer,
+                        "faker":faker,
+                        "headers":headers,
+                        "kwargs": kwargs
+                        })
                 if len(local_parts) == max_workers or i == len(urls)-1:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                         futs = {executor.submit(url_save_m3u8,part["url"],part["filepath"], bar, refer=refer, is_part=True, faker=faker,
