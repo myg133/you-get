@@ -10,6 +10,7 @@ import socket
 import locale
 import logging
 import argparse
+import concurrent.futures
 from http import cookiejar
 from importlib import import_module
 from urllib import request, parse, error
@@ -1057,93 +1058,117 @@ def download_urls(
         parts = []
         print('Downloading %s.%s ...' % (tr(title), ext))
         bar.update()
-        for i, url in enumerate(urls):
-            filename = '%s[%02d].%s' % (title, i, ext)
-            filepath = os.path.join(output_dir, filename)
-            parts.append(filepath)
-            # print 'Downloading %s [%s/%s]...' % (tr(filename), i + 1, len(urls))
-            bar.update_piece(i + 1)
-            # if the part file has done
-            if os.path.exists(filepath):
-                continue
-            if ext == "ts":
-                url_save_m3u8(
-                    url, filepath, bar, refer=refer, is_part=True, faker=faker,
-                    headers=headers, **kwargs
-                )
-            else:
+        if ext == "ts":  # m3u8 下载 使用多线程
+            # 临时parts切片，用来进行异步下载
+            local_parts = []
+            max_workers = 30
+            for i, url in enumerate(urls):
+                filename = '%s[%02d].%s' % (title, i, ext)
+                filepath = os.path.join(output_dir, filename)
+                parts.append(filepath)
+                local_parts.append({
+                    "filepath":filepath,
+                    "url":url,
+                    "bar":bar,
+                    "refer":refer,
+                    "faker":faker,
+                    "headers":headers,
+                    "kwargs": kwargs
+                    })
+                # print 'Downloading %s [%s/%s]...' % (tr(filename), i + 1, len(urls))
+                bar.update_piece(i + 1)
+                # if the part file has done
+                if os.path.exists(filepath):
+                    continue
+                if len(local_parts) == max_workers or i == len(urls)-1:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        futs = {executor.submit(url_save_m3u8,part["url"],part["filepath"], bar, refer=refer, is_part=True, faker=faker,
+                        headers=headers, **kwargs) for part in local_parts}
+                    concurrent.futures.wait(futs)
+                    local_parts = []
+            bar.done()
+        else:  # 常规多Url下载
+            for i, url in enumerate(urls):
+                filename = '%s[%02d].%s' % (title, i, ext)
+                filepath = os.path.join(output_dir, filename)
+                parts.append(filepath)
+                # print 'Downloading %s [%s/%s]...' % (tr(filename), i + 1, len(urls))
+                bar.update_piece(i + 1)
                 url_save(
                     url, filepath, bar, refer=refer, is_part=True, faker=faker,
                     headers=headers, **kwargs
                 )
-        bar.done()
+            bar.done()
 
         if not merge:
             print()
             return
-
-        if 'av' in kwargs and kwargs['av']:
-            from .processor.ffmpeg import has_ffmpeg_installed
-            if has_ffmpeg_installed():
-                from .processor.ffmpeg import ffmpeg_concat_av
-                ret = ffmpeg_concat_av(parts, output_filepath, ext)
-                print('Merged into %s' % output_filename)
-                if ret == 0:
-                    for part in parts:
-                        os.remove(part)
-
-        elif ext in ['flv', 'f4v']:
-            try:
-                from .processor.ffmpeg import has_ffmpeg_installed
-                if has_ffmpeg_installed():
-                    from .processor.ffmpeg import ffmpeg_concat_flv_to_mp4
-                    ffmpeg_concat_flv_to_mp4(parts, output_filepath)
-                else:
-                    from .processor.join_flv import concat_flv
-                    concat_flv(parts, output_filepath)
-                print('Merged into %s' % output_filename)
-            except:
-                raise
-            else:
-                for part in parts:
-                    os.remove(part)
-
-        elif ext == 'mp4':
-            try:
-                from .processor.ffmpeg import has_ffmpeg_installed
-                if has_ffmpeg_installed():
-                    from .processor.ffmpeg import ffmpeg_concat_mp4_to_mp4
-                    ffmpeg_concat_mp4_to_mp4(parts, output_filepath)
-                else:
-                    from .processor.join_mp4 import concat_mp4
-                    concat_mp4(parts, output_filepath)
-                print('Merged into %s' % output_filename)
-            except:
-                raise
-            else:
-                for part in parts:
-                    os.remove(part)
-
-        elif ext == 'ts':
-            try:
-                from .processor.ffmpeg import has_ffmpeg_installed
-                if has_ffmpeg_installed():
-                    from .processor.ffmpeg import ffmpeg_concat_ts_to_mkv
-                    ffmpeg_concat_ts_to_mkv(parts, output_filepath)
-                else:
-                    from .processor.join_ts import concat_ts
-                    concat_ts(parts, output_filepath)
-                print('Merged into %s' % output_filename)
-            except:
-                raise
-            else:
-                for part in parts:
-                    os.remove(part)
-
-        else:
-            print("Can't merge %s files" % ext)
+        _merge(parts,output_filepath,output_filename,ext,**kwargs)
 
     print()
+
+def _merge(parts,output_filepath,output_filename,ext,**kwargs):
+    if 'av' in kwargs and kwargs['av']:
+        from .processor.ffmpeg import has_ffmpeg_installed
+        if has_ffmpeg_installed():
+            from .processor.ffmpeg import ffmpeg_concat_av
+            ret = ffmpeg_concat_av(parts, output_filepath, ext)
+            print('Merged into %s' % output_filename)
+            if ret == 0:
+                for part in parts:
+                    os.remove(part)
+
+    elif ext in ['flv', 'f4v']:
+        try:
+            from .processor.ffmpeg import has_ffmpeg_installed
+            if has_ffmpeg_installed():
+                from .processor.ffmpeg import ffmpeg_concat_flv_to_mp4
+                ffmpeg_concat_flv_to_mp4(parts, output_filepath)
+            else:
+                from .processor.join_flv import concat_flv
+                concat_flv(parts, output_filepath)
+            print('Merged into %s' % output_filename)
+        except:
+            raise
+        else:
+            for part in parts:
+                os.remove(part)
+
+    elif ext == 'mp4':
+        try:
+            from .processor.ffmpeg import has_ffmpeg_installed
+            if has_ffmpeg_installed():
+                from .processor.ffmpeg import ffmpeg_concat_mp4_to_mp4
+                ffmpeg_concat_mp4_to_mp4(parts, output_filepath)
+            else:
+                from .processor.join_mp4 import concat_mp4
+                concat_mp4(parts, output_filepath)
+            print('Merged into %s' % output_filename)
+        except:
+            raise
+        else:
+            for part in parts:
+                os.remove(part)
+
+    elif ext == 'ts':
+        try:
+            from .processor.ffmpeg import has_ffmpeg_installed
+            if has_ffmpeg_installed():
+                from .processor.ffmpeg import ffmpeg_concat_ts_to_mkv
+                ffmpeg_concat_ts_to_mkv(parts, output_filepath)
+            else:
+                from .processor.join_ts import concat_ts
+                concat_ts(parts, output_filepath)
+            print('Merged into %s' % output_filename)
+        except:
+            raise
+        else:
+            for part in parts:
+                os.remove(part)
+
+    else:
+        print("Can't merge %s files" % ext)
+
 
 
 def download_rtmp_url(
