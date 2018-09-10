@@ -19,7 +19,7 @@ except ImportError:
 def get_usable_ffmpeg(cmd):
     try:
         p = subprocess.Popen([cmd, '-version'], stdin=DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, err = p.communicate()
+        out, _ = p.communicate()
         vers = str(out, 'utf-8').split('\n')[0].split()
         assert (vers[0] == 'ffmpeg' and vers[2][0] > '0') or (vers[0] == 'avconv')
         try:
@@ -87,7 +87,8 @@ def ffmpeg_concat_mp4_to_mpg(files, output='output.mpg'):
             os.remove(output + '.txt')
             return True
         else:
-            raise
+            raise ""
+                            
 
     for file in files:
         if os.path.isfile(file):
@@ -111,7 +112,7 @@ def ffmpeg_concat_mp4_to_mpg(files, output='output.mpg'):
         os.remove(output + '.mpg')
         return True
     else:
-        raise
+        raise ""
 
 def ffmpeg_concat_ts_to_mkv(files, output='output.mkv'):
     print('Merging video parts... ', end="", flush=True)
@@ -167,7 +168,7 @@ def ffmpeg_concat_flv_to_mp4(files, output='output.mp4'):
             os.remove(file + '.ts')
         return True
     else:
-        raise
+        raise ""
 
 def ffmpeg_concat_mp4_to_mp4(files, output='output.mp4'):
     print('Merging video parts... ', end="", flush=True)
