@@ -765,7 +765,7 @@ def url_save_m3u8(
                     )
                 else:
                     if bar:
-                        bar.update_received(file_size)
+                        bar.update_received()
                 return
             else:
                 if not is_part:
@@ -797,7 +797,7 @@ def url_save_m3u8(
         if os.path.exists(temp_filepath):
             received += os.path.getsize(temp_filepath)
             if bar:
-                bar.update_received(os.path.getsize(temp_filepath))
+                bar.update_received()
     else:
         open_mode = 'wb'
 
@@ -849,7 +849,7 @@ def url_save_m3u8(
                 output.write(buffer)
                 received += len(buffer)
                 if bar:
-                    bar.update_received(len(buffer))
+                    bar.update_received()
 
     assert received == os.path.getsize(temp_filepath), '%s == %s == %s' % (
         received, os.path.getsize(temp_filepath), temp_filepath
@@ -946,8 +946,8 @@ class PiecesProgressBar:
         sys.stdout.write('\r' + bar)
         sys.stdout.flush()
 
-    def update_received(self, n):
-        self.received += n
+    def update_received(self, n=1):
+        self.current_piece += n
         self.update()
 
     def update_piece(self, n):
@@ -1059,37 +1059,23 @@ def download_urls(
         print('Downloading %s.%s ...' % (tr(title), ext))
         bar.update()
         if ext == "ts":  # m3u8 下载 使用多线程
-            # 临时parts切片，用来进行异步下载
-            local_parts = []
             max_workers = 10
+            futs = set()
+            # 多线程下载
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
             for i, url in enumerate(urls):
                 filename = '%s[%02d].%s' % (title, i, ext)
                 filepath = os.path.join(output_dir, filename)
                 parts.append(filepath)
-                # print 'Downloading %s [%s/%s]...' % (tr(filename), i + 1, len(urls))
-                bar.update_piece(i + 1)
-                # if the part file has done
-                # 最后一个如果存在，则local_parts下载被跳过
-                    
-                if not os.path.exists(filepath):
-                    local_parts.append({
-                        "filepath":filepath,
-                        "url":url,
-                        "bar":bar,
-                        "refer":refer,
-                        "faker":faker,
-                        "headers":headers,
-                        "kwargs": kwargs
-                        })
-                elif not i == len(urls)-1: # 不是最后一个都跳过
+                if os.path.exists(filepath):
                     continue
-
-                if len(local_parts) == max_workers or i == len(urls)-1:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        futs = {executor.submit(url_save_m3u8,part["url"],part["filepath"], bar, refer=refer, is_part=True, faker=faker,
-                        headers=headers, **kwargs) for part in local_parts}
-                    concurrent.futures.wait(futs)
-                    local_parts = []
+                rst = executor.submit(url_save_m3u8,
+                url,
+                filepath, 
+                bar, refer=refer, is_part=True, faker=faker,
+                headers=headers, **kwargs)
+                futs.add(rst)
+            concurrent.futures.wait(futs)                    
             bar.done()
         else:  # 常规多Url下载
             for i, url in enumerate(urls):
