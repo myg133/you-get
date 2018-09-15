@@ -120,7 +120,7 @@ def ffmpeg_concat_ts_to_mkv(files, output='output.mkv'):
     params.append('concat:')
     for file in files:
         params[-1] += file + '|'
-    params += ['-f', 'matroska', '-c', 'copy', output]
+    params += ['-f', 'matroska', '-c:v', 'copy', output]
 
     try:
         if subprocess.call(params, stdin=STDIN) == 0:
