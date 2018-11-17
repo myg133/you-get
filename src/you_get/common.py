@@ -1156,7 +1156,7 @@ def _merge(parts,output_filepath,output_filename,ext,**kwargs):
             if has_ffmpeg_installed():
                 from .processor.ffmpeg import ffmpeg_concat_ts_to_mkv,ffmpeg_just_concat_ts
                 file_count = len(parts)
-                MAX_FILE_TO_READ = 1000
+                MAX_FILE_TO_READ = 2000
                 merge_count = 0
                 if file_count > MAX_FILE_TO_READ:
                     merge_count = int(file_count/MAX_FILE_TO_READ)+1
