@@ -1166,12 +1166,12 @@ def _merge(parts,output_filepath,output_filename,ext,**kwargs):
                         if len(file_name_temp) > 0:
                             n_parts.insert(file_name_temp)
                         if len(n_parts) < MAX_FILE_TO_READ:
-                            file_neme_temp = output_filepath
+                            file_name_temp = output_filepath
                         else:
                              fnt = output_filepath.split('.')
                              fnt[-2] = fnt[-2]+"_tmp"+"_tmp"+str(i)
                              file_name_temp = '.'.join(fnt)
-                        ffmpeg_concat_ts_to_mkv(n_parts, file_neme_temp)
+                        ffmpeg_concat_ts_to_mkv(n_parts, file_name_temp)
                 else:
                     ffmpeg_concat_ts_to_mkv(parts, output_filepath)
             else:
