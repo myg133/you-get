@@ -1168,7 +1168,7 @@ def _merge(parts,output_filepath,output_filename,ext,**kwargs):
                         n_parts = parts[i*MAX_FILE_TO_READ:(i+1)*MAX_FILE_TO_READ]
                         if len(file_name_temp) > 0:
                             n_parts.insert(0,file_name_temp)
-                            parts.append(file_name_temp)
+                            parts.insert(0,file_name_temp) # 添加到原始队列中，用于删除，只能insert，append会重复添加
                         if len(n_parts) < MAX_FILE_TO_READ:
                             file_name_temp = output_filepath
                             ffmpeg_concat_ts_to_mkv(n_parts, file_name_temp)
