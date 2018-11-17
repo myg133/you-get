@@ -1154,7 +1154,26 @@ def _merge(parts,output_filepath,output_filename,ext,**kwargs):
             from .processor.ffmpeg import has_ffmpeg_installed
             if has_ffmpeg_installed():
                 from .processor.ffmpeg import ffmpeg_concat_ts_to_mkv
-                ffmpeg_concat_ts_to_mkv(parts, output_filepath)
+                file_count = len(parts)
+                MAX_FILE_TO_READ = 4096
+                merge_count = 0
+                if file_count > MAX_FILE_TO_READ:
+                    merge_count = file_count/MAX_FILE_TO_READ
+                if merge_count > 0:
+                    file_name_temp = ""
+                    for i in range(merge_count):
+                        n_parts = parts[i*MAX_FILE_TO_READ:(i+1)*MAX_FILE_TO_READ]
+                        if len(file_name_temp) > 0:
+                            n_parts.insert(file_name_temp)
+                        if len(n_parts) < MAX_FILE_TO_READ:
+                            file_neme_temp = output_filepath
+                        else:
+                             fnt = output_filepath.split('.')
+                             fnt[-2] = fnt[-2]+"_tmp"+"_tmp"+str(i)
+                             file_name_temp = '.'.join(fnt)
+                        ffmpeg_concat_ts_to_mkv(n_parts, file_neme_temp)
+                else:
+                    ffmpeg_concat_ts_to_mkv(parts, output_filepath)
             else:
                 from .processor.join_ts import concat_ts
                 concat_ts(parts, output_filepath)
