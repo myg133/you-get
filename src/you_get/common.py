@@ -1095,7 +1095,8 @@ def download_urls(
             return
         try:
             _merge(parts,output_filepath,output_filename,ext,**kwargs)
-        except:
+        except Exception as e:
+            print("merge error:"+e)
             download_urls(
                 urls, title, ext, total_size, output_dir='.', refer=None, merge=True,
                 faker=False, headers={}, **kwargs)
@@ -1153,25 +1154,31 @@ def _merge(parts,output_filepath,output_filename,ext,**kwargs):
         try:
             from .processor.ffmpeg import has_ffmpeg_installed
             if has_ffmpeg_installed():
-                from .processor.ffmpeg import ffmpeg_concat_ts_to_mkv
+                from .processor.ffmpeg import ffmpeg_concat_ts_to_mkv,ffmpeg_just_concat_ts
                 file_count = len(parts)
-                MAX_FILE_TO_READ = 4096
+                MAX_FILE_TO_READ = 1000
                 merge_count = 0
                 if file_count > MAX_FILE_TO_READ:
-                    merge_count = (file_count%MAX_FILE_TO_READ)+1
+                    merge_count = int(file_count/MAX_FILE_TO_READ)+1
+                    print("file count is:" + str(file_count))
+                    print("merge count is:" + str(merge_count))
                 if merge_count > 0:
                     file_name_temp = ""
                     for i in range(merge_count):
                         n_parts = parts[i*MAX_FILE_TO_READ:(i+1)*MAX_FILE_TO_READ]
                         if len(file_name_temp) > 0:
-                            n_parts.insert(file_name_temp)
+                            n_parts.insert(0,file_name_temp)
+                            parts.append(file_name_temp)
                         if len(n_parts) < MAX_FILE_TO_READ:
                             file_name_temp = output_filepath
+                            ffmpeg_concat_ts_to_mkv(n_parts, file_name_temp)
                         else:
                              fnt = output_filepath.split('.')
-                             fnt[-2] = fnt[-2]+"_tmp"+"_tmp"+str(i)
+                             fnt[-2] = fnt[-2]+"_tmp"+str(i)
+                             fnt[-1] = 'ts'
                              file_name_temp = '.'.join(fnt)
-                        ffmpeg_concat_ts_to_mkv(n_parts, file_name_temp)
+                             ffmpeg_just_concat_ts(n_parts, file_name_temp)
+                        print(file_name_temp)
                 else:
                     ffmpeg_concat_ts_to_mkv(parts, output_filepath)
             else:
