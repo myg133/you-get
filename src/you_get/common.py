@@ -1158,7 +1158,7 @@ def _merge(parts,output_filepath,output_filename,ext,**kwargs):
                 MAX_FILE_TO_READ = 4096
                 merge_count = 0
                 if file_count > MAX_FILE_TO_READ:
-                    merge_count = file_count/MAX_FILE_TO_READ
+                    merge_count = (file_count%MAX_FILE_TO_READ)+1
                 if merge_count > 0:
                     file_name_temp = ""
                     for i in range(merge_count):
