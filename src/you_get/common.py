@@ -1124,9 +1124,9 @@ def download_urls(
             for i, url in enumerate(urls):
                 filename = '%s[%02d].%s' % (title, i, ext)
                 filepath = os.path.join(output_dir, filename)
-                parts.append(filepath)
                 if os.path.exists(filepath):
                     continue
+                parts.append(filepath)
                 rst = executor.submit(url_save_m3u8,
                 url,
                 filepath, 
