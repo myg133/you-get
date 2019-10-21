@@ -6,7 +6,7 @@ from you_get.extractors import (
     imgur,
     magisto,
     youtube,
-    bilibili,
+    missevan
 )
 
 
@@ -21,6 +21,13 @@ class YouGetTests(unittest.TestCase):
             info_only=True
         )
 
+    def test_missevan(self):
+        missevan.download('https://m.missevan.com/sound/1285995', info_only=True)
+        missevan.download_playlist(
+            'https://www.missevan.com/mdrama/drama/24130', info_only=True)
+        missevan.download_playlist(
+            'https://www.missevan.com/albuminfo/203090', info_only=True)
+
     def test_youtube(self):
         youtube.download(
             'http://www.youtube.com/watch?v=pzKerr0JIPA', info_only=True
@@ -30,6 +37,7 @@ class YouGetTests(unittest.TestCase):
             'http://www.youtube.com/attribution_link?u=/watch?v%3DldAKIzq7bvs%26feature%3Dshare',  # noqa
             info_only=True
         )
+
 
 if __name__ == '__main__':
     unittest.main()

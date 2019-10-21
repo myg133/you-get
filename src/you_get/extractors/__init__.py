@@ -13,20 +13,17 @@ from .ckplayer import *
 from .cntv import *
 from .coub import *
 from .dailymotion import *
-from .dilidili import *
 from .douban import *
 from .douyin import *
 from .douyutv import *
 from .ehow import *
 from .facebook import *
-from .fantasy import *
 from .fc2video import *
 from .flickr import *
 from .freesound import *
 from .funshion import *
 from .google import *
 from .heavymusic import *
-from .huaban import *
 from .icourses import *
 from .ifeng import *
 from .imgur import *
@@ -54,7 +51,6 @@ from .nanagogo import *
 from .naver import *
 from .netease import *
 from .nicovideo import *
-from .panda import *
 from .pinterest import *
 from .pixnet import *
 from .pptv import *
@@ -67,6 +63,7 @@ from .sohu import *
 from .soundcloud import *
 from .suntv import *
 from .theplatform import *
+from .tiktok import *
 from .tucao import *
 from .tudou import *
 from .tumblr import *
@@ -89,3 +86,4 @@ from .khan import *
 from .zhanqi import *
 from .kuaishou import *
 from .zhibo import *
+from .zhihu import *
