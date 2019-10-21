@@ -1133,7 +1133,7 @@ def download_urls(
                 bar, refer=refer, is_part=True, faker=faker,
                 headers=headers, **kwargs)
                 futs.add(rst)
-            concurrent.futures.wait(futs)                    
+            concurrent.futures.wait(futs)
             bar.done()
         else:  # 常规多Url下载
             for i, url in enumerate(urls):
@@ -1898,6 +1898,8 @@ def google_search(url):
 
 def url_to_module(origin_url):
     url = origin_url
+    # for m3u8 download file list rule check
+    # URL Rule: http[s]://xxxxx.aa/bb/cc.m3u8?xxxx!!filename
     propties = origin_url.split("!!")
     if len(propties)>0:
         url = propties[0]
