@@ -1152,7 +1152,7 @@ def download_urls(
             print()
             return
         try:
-            for i,fp in parts:
+            for i,fp in enumerate(parts):
                 if not os.path.exists():
                     url_save_m3u8(urls[i],fp,bar,refer = refer,is_part=True,faker=faker,headers=headers,**kwargs)
             _merge(parts,output_filepath,output_filename,ext,**kwargs)
