@@ -1124,9 +1124,9 @@ def download_urls(
             for i, url in enumerate(urls):
                 filename = '%s[%02d].%s' % (title, i, ext)
                 filepath = os.path.join(output_dir, filename)
+                parts.append(filepath)
                 if os.path.exists(filepath):
                     continue
-                parts.append(filepath)
                 rst = executor.submit(url_save_m3u8,
                 url,
                 filepath, 
@@ -1152,6 +1152,9 @@ def download_urls(
             print()
             return
         try:
+            for i,fp in parts:
+                if not os.path.exists():
+                    url_save_m3u8(urls[i],fp,bar,refer = refer,is_part=True,faker=faker,headers=headers,**kwargs)
             _merge(parts,output_filepath,output_filename,ext,**kwargs)
         except Exception as e:
             print("merge error:"+e)
