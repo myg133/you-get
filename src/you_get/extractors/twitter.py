@@ -3,6 +3,7 @@
 __all__ = ['twitter_download']
 
 from ..common import *
+from .universal import *
 from .vine import vine_download
 
 def extract_m3u(source):
@@ -15,6 +16,10 @@ def extract_m3u(source):
     return ['https://video.twimg.com%s' % i for i in s2]
 
 def twitter_download(url, output_dir='.', merge=True, info_only=False, **kwargs):
+    if re.match(r'https?://pbs\.twimg\.com', url):
+        universal_download(url, output_dir, merge=merge, info_only=info_only, **kwargs)
+        return
+
     if re.match(r'https?://mobile', url): # normalize mobile URL
         url = 'https://' + match1(url, r'//mobile\.(.+)')
 
@@ -29,7 +34,7 @@ def twitter_download(url, output_dir='.', merge=True, info_only=False, **kwargs)
                              **kwargs)
         return
 
-    html = get_html(url, faker=True)
+    html = get_html(url, faker=False) # disable faker to prevent 302 infinite redirect
     screen_name = r1(r'twitter\.com/([^/]+)', url) or r1(r'data-screen-name="([^"]*)"', html) or \
         r1(r'<meta name="twitter:title" content="([^"]*)"', html)
     item_id = r1(r'twitter\.com/[^/]+/status/(\d+)', url) or r1(r'data-item-id="([^"]*)"', html) or \
