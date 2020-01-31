@@ -30,7 +30,7 @@ def universal_download(origin_url, output_dir='.', merge=True, info_only=False, 
         urls = get_m3u8_files(url)
         try:
             download_urls(urls, title, 'ts', 0, output_dir, merge=True)
-        except expression as identifier:
+        except Exception as identifier:
             pass
         
         return

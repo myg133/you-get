@@ -1140,7 +1140,7 @@ def download_urls(
                 bar, refer=refer, is_part=True, faker=faker,
                 headers=headers, **kwargs)
                 futs.add(rst)
-            concurrent.futures.wait(futs)                    
+            concurrent.futures.wait(futs)
             bar.done()
         else:  # 常规多Url下载
             for i, url in enumerate(urls):
@@ -1159,9 +1159,12 @@ def download_urls(
             print()
             return
         try:
+            for i,fp in enumerate(parts):
+                if not os.path.exists(fp):
+                    url_save_m3u8(urls[i],fp,bar,refer = refer,is_part=True,faker=faker,headers=headers,**kwargs)
             _merge(parts,output_filepath,output_filename,ext,**kwargs)
         except Exception as e:
-            print("merge error:"+e)
+            print("merge error:"+str(e))
             download_urls(
                 urls, title, ext, total_size, output_dir='.', refer=None, merge=True,
                 faker=False, headers={}, **kwargs)
@@ -1905,6 +1908,8 @@ def google_search(url):
 
 def url_to_module(origin_url):
     url = origin_url
+    # for m3u8 download file list rule check
+    # URL Rule: http[s]://xxxxx.aa/bb/cc.m3u8?xxxx!!filename
     propties = origin_url.split("!!")
     if len(propties)>0:
         url = propties[0]
